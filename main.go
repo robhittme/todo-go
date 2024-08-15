@@ -1,67 +1,135 @@
 package main
 
 import (
-	"encoding/json"
+	"bufio"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
-type Task struct {
-	Name string `json:"name"`
-	//TODO: make this a more defined type
-	Status    string `json:"status"`
-	CreatedAt int64  `json:"createdAt"`
-	UpdatedAt int64  `json:"updatedAt"`
-}
-
-func getUnixTime() int64 {
-	return time.Now().UTC().Unix()
-}
-
-// Create the task and store it in a file
-func createTask(task string) (Task, error) {
-	//forgot to turn this into a file.
-	fileName := fmt.Sprint(task, "_", getUnixTime(), ".json")
-	file, err := os.Create("./data/" + fileName)
-	if err != nil {
-		return Task{}, err
-	}
-	defer file.Close()
-	content := Task{
-		Name:      task,
-		Status:    "pending",
-		CreatedAt: getUnixTime(),
-		UpdatedAt: getUnixTime(),
-	}
-	jsonData, err := json.Marshal(content)
-	if err != nil {
-		return Task{}, err
-	}
-	str := string(jsonData)
-	_, err = file.WriteString(str)
-	if err != nil {
-		return Task{}, err
-	}
-	return Task{}, nil
-}
-
-func listCommands() []string {
+func availableCommands() {
 	commands := []string{
 		"create",
+		"list",
+		"update",
+		"delete",
 	}
-	return commands
+	for _, c := range commands {
+		fmt.Println(c)
+	}
+
 }
 
+// first we need to have a defined task. right now it will be just a name
+func createTask(task string) (bool, error) {
+	//we need to actually create this
+	file, err := os.OpenFile("./data/tasks.txt", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 644)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+	//yes... i konw this looks ridculous. bare with me.
+	t := fmt.Sprint(
+		"name: ", task, ", ",
+		" status: ", "todo, ",
+		" createdAt: ", time.Now().UTC().Unix(), ", ",
+		" updatedAt: ", time.Now().UTC().Unix())
+	_, err = file.WriteString(t + "\n")
+	if err != nil {
+		panic(err)
+	}
+	return true, nil
+}
+
+func listTasks() {
+	//now we want to be able to call this list of tasks and loop through reading each one.
+	file, err := os.Open("./data/tasks.txt")
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		fmt.Println(line)
+	}
+}
+
+func deleteTask(task string) (bool, error) {
+	file, err := os.ReadFile("./data/tasks.txt")
+	if err != nil {
+		return false, err
+	}
+	lines := strings.Split(string(file), "\n")
+	for i, line := range lines {
+		t := strings.Split(line, ",")
+		if strings.Contains(t[0], task) {
+			lines[i] = ""
+		}
+		output := strings.Join(lines, "\n")
+		err = os.WriteFile("./data/tasks.txt", []byte(output), 644)
+		if err != nil {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+func updateTask(task, status string) (bool, error) {
+	file, err := os.ReadFile("./data/tasks.txt")
+	if err != nil {
+		return false, nil
+
+	}
+	lines := strings.Split(string(file), "\n")
+	for i, line := range lines {
+		t := strings.Split(line, ",")
+		if strings.Contains(t[0], task) {
+			nc := fmt.Sprint(
+				"name: ", task, ", ",
+				" status: ", status, ", ",
+				" createdAt: ", t[3], ", ",
+				" updatedAt: ", time.Now().UTC().Unix())
+			lines[i] = nc
+		}
+		output := strings.Join(lines, "\n")
+		err = os.WriteFile("./data/tasks.txt", []byte(output), 644)
+		if err != nil {
+			return false, nil
+		}
+	}
+	return true, nil
+}
 func main() {
+	/*Lets list out what we would want here in a small CLI
+		- list tasks x
+		- create task x
+		- list commands x
+		- update task x
+		- delete task
+
+	To do this with a cli we should create a list of these commands.
+	*/
 	if len(os.Args) < 2 {
-		fmt.Println(listCommands())
+		availableCommands()
 		os.Exit(1)
 	}
-	command := os.Args[1]
-	switch command {
+	flag := os.Args[1]
+	switch flag {
+	case "list":
+		listTasks()
 	case "create":
 		task := os.Args[2]
 		createTask(task)
+	case "update":
+		task := os.Args[2]
+		status := os.Args[3]
+		updateTask(task, status)
+	case "delete":
+		task := os.Args[2]
+		deleteTask(task)
+	default:
+		availableCommands()
 	}
 }
